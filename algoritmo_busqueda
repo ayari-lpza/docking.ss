@@ -1,0 +1,48 @@
+install.packages("rvest")
+library(rvest)
+
+# web scraping
+scrape_and_search <- function(urls_origen, url_destino) {
+  
+  for (url_origen in urls_origen) {
+   
+    pagina_origen <- read_html(url_origen)
+    
+    
+    pagina_destino <- read_html(url_destino)
+    
+    # Extraer el nombre de la estructura de la página de origen
+    nombre_estructura_origen <- pagina_origen %>%
+      html_nodes(".Official Full Name") %>%
+      html_text()
+    
+    # Extraer el organismo de la página de origen
+    organismo_origen <- pagina_origen %>%
+      html_nodes(".organism") %>%
+      html_text()
+    
+    # Busca el nombre de la estructura y el organismo en la página de destino
+    if (grepl(nombre_estructura_origen, html_text(pagina_destino)) && 
+        grepl(organismo_origen, html_text(pagina_destino))) {
+      cat("El nombre de la estructura y el organismo se encontraron en la página de destino:", url_destino, "\n")
+    } else {
+      cat("El nombre de la estructura y/o el organismo no se encontraron en la página de destino:", url_destino, "\n")
+    }
+  }
+}
+
+
+urls_origen <- character(0)
+repeat {
+  url_origen <- readline("Ingresa el gen a buscar o escribe 'fin' para finalizar): ")
+  if (url_origen == "fin") {
+    break
+  } else {
+    urls_origen <- c(urls_origen, url_origen)
+  }
+}
+
+# URL de la página de destino fija
+url_destino <- "https://www.rcsb.org/"
+
+scrape_and_search(urls_origen, url_destino)
