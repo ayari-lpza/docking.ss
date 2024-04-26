@@ -1,0 +1,54 @@
+# Instalar y cargar los paquetes necesarios
+install.packages("rvest")
+install.packages("stringdist")
+library(rvest)
+library(stringdist)
+
+# Función para extraer datos específicos de una URL de RCSB PDB
+extract_data_from_rcsb <- function(url) {
+  webpage <- read_html(url)
+  official_name <- html_text(html_nodes(webpage, xpath = "//span[@class='official_name']"))
+  organism <- html_text(html_nodes(webpage, xpath = "//span[@class='organism']"))
+  data <- list(official_name = official_name, organism = organism)
+  return(data)
+}
+
+# Función para comparar la similitud entre dos conjuntos de datos
+compare_data <- function(data1, data2) {
+  similarity_name <- stringdist::stringdist(data1$official_name, data2$official_name, method = "jaccard")
+  similarity_organism <- stringdist::stringdist(data1$organism, data2$organism, method = "jaccard")
+  similarity <- list(name = similarity_name, organism = similarity_organism)
+  return(similarity)
+}
+
+# Solicitar al usuario ingresar la lista de URLs a comparar
+enter_urls <- function() {
+  urls <- character()
+  repeat {
+    url <- readline(prompt = "Enter a URL to compare (or type 'done' to finish): ")
+    if (tolower(url) == "done") {
+      break
+    } else {
+      urls <- c(urls, url)
+    }
+  }
+  return(urls)
+}
+
+# Solicitar al usuario ingresar las URLs a comparar
+urls <- enter_urls()
+
+# URL de búsqueda en RCSB PDB
+rcsb_search_url <- "https://www.rcsb.org/search"
+
+# Extraer los datos de la base de datos de referencia desde RCSB PDB
+reference_data <- extract_data_from_rcsb(rcsb_search_url)
+
+# Iterar sobre cada URL y comparar con los datos de referencia
+for (url in urls) {
+  cat("Comparing with", url, ":\n")
+  data <- extract_data_from_rcsb(url)
+  similarity <- compare_data(data, reference_data)
+  cat("Similarity with Official Name:", similarity$name, "\n")
+  cat("Similarity with Organism:", similarity$organism, "\n")
+}
