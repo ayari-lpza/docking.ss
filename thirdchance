@@ -61,3 +61,64 @@ for (i in 1:nrow(data)) {
 write.csv(resultados, "resultados.csv", row.names = FALSE)
 
 print("Extracción completa y resultados guardados.")
+
+#(2) MATCHING DE RESULTADOS EN PDB
+
+# Leer los datos extraídos previamente
+datos_extraidos <- read.csv("resultados.csv")
+
+# Data frame vacío para almacenar los resultados de la búsqueda
+resultados_busqueda <- data.frame(Nombre = character(), Organismo = character(), Codigo = character(), stringsAsFactors = FALSE)
+
+# extraer datos en la segunda página web
+buscar_datos <- function(nombre, organismo) {
+  # Crear la URL de búsqueda (ajusta el formato según la página web)
+  url_busqueda <- paste0("https://www.rcsb.org/", URLencode(nombre), "&organismo=", URLencode(organismo))
+  
+  # Leer la página de resultados de búsqueda
+  pagina_busqueda <- tryCatch({
+    read_html(url_busqueda)
+  }, error = function(e) {
+    NA
+  })
+  
+  # Verificar si la página fue leída correctamente
+  if (!is.na(pagina_busqueda)) {
+    # Extraer el código (ajusta la expresión XPath según la estructura de la página)
+    codigos <- pagina_busqueda %>%
+      html_nodes(xpath = "//XPATH_PARA_CODIGO") %>%
+      html_text(trim = TRUE)
+    
+    # Extraer otros detalles necesarios (ajusta según la estructura de la página)
+    detalles <- pagina_busqueda %>%
+      html_nodes(xpath = "//XPATH_PARA_DETALLES") %>%
+      html_text(trim = TRUE)
+    
+    # Si hay resultados, devolver una lista con los códigos y detalles
+    if (length(codigos) > 0) {
+      return(data.frame(Nombre = rep(nombre, length(codigos)), Organismo = rep(organismo, length(codigos)), Codigo = codigos, Detalles = detalles, stringsAsFactors = FALSE))
+    } else {
+      return(data.frame(Nombre = character(), Organismo = character(), Codigo = character(), Detalles = character(), stringsAsFactors = FALSE))
+    }
+  } else {
+    return(data.frame(Nombre = character(), Organismo = character(), Codigo = character(), Detalles = character(), stringsAsFactors = FALSE))
+  }
+}
+
+# Iterar sobre los datos extraídos y buscar en la segunda página web
+for (i in 1:nrow(datos_extraidos)) {
+  nombre <- datos_extraidos$Nombre[i]
+  organismo <- datos_extraidos$Organismo[i]
+  
+  resultados <- buscar_datos(nombre, organismo)
+  
+  # Añadir los resultados al data frame
+  resultados_busqueda <- rbind(resultados_busqueda, resultados)
+}
+
+# Guardar los resultados en un nuevo archivo CSV
+write.csv(resultados_busqueda, "resultados_busqueda.csv", row.names = FALSE)
+
+print("Búsqueda completa y resultados guardados.")
+
+
