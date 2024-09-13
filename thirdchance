@@ -1,0 +1,63 @@
+# Instalar las librerías necesarias si no las tienes
+ #install.packages("httr")
+ #install.packages("xml2")
+ #install.packages("dplyr")
+
+# Cargar las librerías
+library(httr)
+library(xml2)
+library(dplyr)
+
+#(1) OBTENCIÓN DE DATOS DE INTERÉS 
+# Leer el archivo CSV con los links
+file_path <- "i1csv.csv" # Cambia por archivo csv, previamente cargado
+data <- read.csv(file_path)
+
+# Almacenar los resultados
+resultados <- data.frame(Nombre = character(), Organismo = character(), stringsAsFactors = FALSE)
+
+# Función para extraer nombre y organismo de cada enlace
+extraer_datos <- function(link) {
+  # Leer el contenido de la página web
+  respuesta <- tryCatch({
+    GET(link)
+  }, error = function(e) {
+    NA
+  })
+  
+  # Verificar si la respuesta fue obtenida correctamente
+  if (!is.na(respuesta) && status_code(respuesta) == 200) {
+    contenido <- content(respuesta, as = "text")
+    pagina <- read_html(contenido)
+    
+    # Extraer nombre (ajusta la expresión XPath según la estructura de la página)
+    nombre <- pagina %>%
+    xml_find_first("//*[@id=\'summaryDl\']/dd[2]") %>%
+      xml_text(trim = TRUE)
+    
+    # Extraer organismo (ajusta la expresión XPath según la estructura de la página)
+    organismo <- pagina %>%
+      xml_find_first("//*[@id=\'summaryDl\']/dd[7]/a") %>%
+      xml_text(trim = TRUE)
+    
+    # Devolver los resultados como una lista
+    return(list(nombre = nombre, organismo = organismo))
+  } else {
+    return(list(nombre = NA, organismo = NA))
+  }
+}
+
+# Iterar sobre los links y extraer los datos
+for (i in 1:nrow(data)) {
+  link <- data$Links[i] # Suponiendo que la columna con los enlaces se llama 'Links'
+  
+  datos <- extraer_datos(link)
+  
+  # Añadir los resultados al data frame
+  resultados <- rbind(resultados, data.frame(Nombre = datos$nombre, Organismo = datos$organismo))
+}
+
+# Guardar los resultados en un nuevo archivo CSV
+write.csv(resultados, "resultados.csv", row.names = FALSE)
+
+print("Extracción completa y resultados guardados.")
