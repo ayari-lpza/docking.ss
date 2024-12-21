@@ -5,9 +5,40 @@ from rcsbsearchapi import rcsb_attributes as attrs
 gene_name = "SLC6A4"  # Nombre del gen a buscar
 organism_name = "Homo sapiens"  # Nombre del organismo
 
-# Consulta 
+# Consulta y obtencion de estructuras en PDB databank
 q1 = attrs.rcsb_entity_source_organism.rcsb_gene_name.value == gene_name
 q2 = attrs.rcsb_entity_source_organism.scientific_name == organism_name
 query = q1 & q2
 results = list(query())
 print("Estructuras encontradas:", results)
+#Si el nombre del gen no esta asociado a ninguna estructura dentro de PDB databank,
+#el algortimo no generara resultados. 
+
+#posterior analisis de las estructuras obtenidas, selecciona la que se trabajará con el resto del algoritmo
+pdb_id = '5I6X'
+print("Estructura seleccionada:",pdb_id)
+
+import os  # Para manejar directorios
+import requests  # Para descargar archivos
+
+# Realiza un directorio para los archivos PDB 
+protein_directory = "protein_structures"
+#os.makedirs(protein_directory, exist_ok=True) #si no se tiene un directorio generado, desmarcar
+
+# Descarga la estructura PDB
+pdb_request = requests.get(f"https://files.rcsb.org/download/{pdb_id}.pdb")
+
+if pdb_request.status_code == 200:
+    # Guarda el archivo PDB
+    with open(f"{protein_directory}/{pdb_id}.pdb", "w+") as f:
+        f.write(pdb_request.text)
+    print(f"Estructura {pdb_id} descargada y guardada en {protein_directory}/")
+else:
+    print(f"Error al descargar la estructura {pdb_id}. Código de estado: {pdb_request.status_code}")
+
+#VISUALIZACION DE LA ESTRUCTURA
+import MDAnalysis as mda
+pdb_file = f"protein_structures/{pdb_id}.pdb"
+u = mda.Universe(pdb_file)
+print(u)
+
