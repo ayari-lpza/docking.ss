@@ -1,7 +1,7 @@
 from rcsbsearchapi.search import TextQuery
 from rcsbsearchapi import rcsb_attributes as attrs
 
-# Datos obtenidos de NCBI
+# OBTENCION DE PROTEINAS A PARTIR DE DATOS OBTENIDOS DE NCBI
 gene_name = "SLC6A4"  # Nombre del gen a buscar
 organism_name = "Homo sapiens"  # Nombre del organismo
 
@@ -25,20 +25,100 @@ import requests  # Para descargar archivos
 protein_directory = "protein_structures"
 #os.makedirs(protein_directory, exist_ok=True) #si no se tiene un directorio generado, desmarcar
 
-# Descarga la estructura PDB
+# Descarga de la estructura PDB
 pdb_request = requests.get(f"https://files.rcsb.org/download/{pdb_id}.pdb")
 
 if pdb_request.status_code == 200:
-    # Guarda el archivo PDB
+    # Almacenamiento del archivo PDB
     with open(f"{protein_directory}/{pdb_id}.pdb", "w+") as f:
         f.write(pdb_request.text)
     print(f"Estructura {pdb_id} descargada y guardada en {protein_directory}/")
 else:
     print(f"Error al descargar la estructura {pdb_id}. Código de estado: {pdb_request.status_code}")
 
-#VISUALIZACION DE LA ESTRUCTURA
+#VISUALIZACION DE LA ESTRUCTURA DE PROTEINA
 import MDAnalysis as mda
 pdb_file = f"protein_structures/{pdb_id}.pdb"
 u = mda.Universe(pdb_file)
 print(u)
+import nglview as nv
+view=nv.show_mdanalysis(u) #visualizar estructura
+view
 
+#PREPARACION DEL BLANCO 
+#Seleccion de atomos 
+protein = u.select_atoms("protein")
+ligand = u.select_atoms("resname 8PR") #el nombre del ligando va en funcion del ligando unido a la proteina seleccionada
+water = u.select_atoms("resname HOH") #solo se llena en caso de que se quieran seleccionar las moleculas de agua
+water 
+ #Generacion de nuevo archivo .pdb
+protein_pdb_path = f"{protein_directory}/protein_{pdb_id}.pdb"
+protein.write(protein_pdb_path)
+protein_pqr_path = f"{protein_directory}/protein_{pdb_id}.pqr"
+
+# Comando para ejecutar PDB2PQR
+import subprocess
+pdb2pqr_command = [
+    "pdb2pqr",
+    "--ff=AMBER",  # Usar el campo de fuerza AMBER
+    "--with-ph=7.0",  # Configurar pH
+    protein_pdb_path,  # Archivo de entrada
+    protein_pqr_path  # Archivo de salida
+]
+
+try:
+    subprocess.run(pdb2pqr_command, check=True)
+    print(f"Archivo PQR generado en: {protein_pqr_path}")
+except subprocess.CalledProcessError as e:
+    print(f"Error al ejecutar PDB2PQR: {e}")
+    
+pdbqt_directory = "pdbqt_structures" #directorio definido para los archivos pdbqt
+os.makedirs(pdbqt_directory, exist_ok=True)  # Crea el directorio si no existe
+
+# Carga la estructura PQR
+pqr_path = f"{protein_directory}/protein_{pdb_id}.pqr"
+u = mda.Universe(pqr_path)
+
+pdbqt_path = f"{pdbqt_directory}/{pdb_id}.pdbqt" #conversion a PDBQT
+u.atoms.write(pdbqt_path)
+
+print(f"Archivo PDBQT generado y guardado en: {pdbqt_path}")
+
+with open(f"{pdbqt_directory}/{pdb_id}.pdbqt", 'r') as file:
+    file_content = file.read()
+#MDAnalysis genera dos lineas que autodockVina no reconoce, por lo que es importante modificarlas 
+
+# Reemplazar 'TITLE' y 'CRYST1' con 'REMARK'
+file_content = file_content.replace('TITLE', 'REMARK').replace('CRYST1', 'REMARK')
+with open(f"{pdbqt_directory}/{pdb_id}.pdbqt", 'w') as file:
+    file.write(file_content)
+
+#PREPARACION DE LOS LIGANDOS
+#en este caso, los ligandos fueron previamente generados a traves de ChemDraw
+#y minimizados molecularmente con MMF94
+import os
+from meeko import MoleculePreparation
+
+# Directorio de entrada con los ligandos y salida para los archivos PDBQT
+ligands_directory = "ligands"  # Directorio donde están tus ligandos
+pdbqt_directory = "ligands_pdbqt"  # Directorio donde se guardarán los PDBQT
+os.makedirs(pdbqt_directory, exist_ok=True)
+
+# Procesar cada ligando en el directorio
+for ligand_file in os.listdir(ligands_directory):
+    if ligand_file.endswith((".mol2", ".sdf", ".pdb")):  # Extensiones válidas
+        ligand_path = os.path.join(ligands_directory, ligand_file)
+        pdbqt_path = os.path.join(pdbqt_directory, f"{os.path.splitext(ligand_file)[0]}.pdbqt")
+
+        # Preparar el ligando
+        prep = MoleculePreparation()
+        prep.load(ligand_path)  # Cargar el ligando
+        pdbqt_content = prep.write_pdbqt_string()  # Generar el contenido PDBQT
+
+        # Guardar el archivo PDBQT
+        with open(pdbqt_path, "w") as pdbqt_file:
+            pdbqt_file.write(pdbqt_content)
+
+        print(f"Ligando procesado: {ligand_file} -> {pdbqt_path}")
+
+print("Todos los ligandos han sido convertidos a formato PDBQT.")
