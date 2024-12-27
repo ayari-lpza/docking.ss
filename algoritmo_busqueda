@@ -95,30 +95,45 @@ with open(f"{pdbqt_directory}/{pdb_id}.pdbqt", 'w') as file:
 
 #PREPARACION DE LOS LIGANDOS
 #en este caso, los ligandos fueron previamente generados a traves de ChemDraw
-#y minimizados molecularmente con MMF94
+#y minimizados molecularmente con MMimport os
 import os
-from meeko import MoleculePreparation
+import subprocess
+from pathlib import Path
 
-# Directorio de entrada con los ligandos y salida para los archivos PDBQT
-ligands_directory = "ligands"  # Directorio donde están tus ligandos
-pdbqt_directory = "ligands_pdbqt"  # Directorio donde se guardarán los PDBQT
-os.makedirs(pdbqt_directory, exist_ok=True)
+# Define la ruta a la carpeta de entrada y salida
+input_dir = Path(os.getcwd(), "Ligands")
+output_dir = Path("C:/Users/User/Downloads/python/ligands_pdbqt")
 
-# Procesar cada ligando en el directorio
-for ligand_file in os.listdir(ligands_directory):
-    if ligand_file.endswith((".mol2", ".sdf", ".pdb")):  # Extensiones válidas
-        ligand_path = os.path.join(ligands_directory, ligand_file)
-        pdbqt_path = os.path.join(pdbqt_directory, f"{os.path.splitext(ligand_file)[0]}.pdbqt")
+# Verifica que la carpeta de entrada exista
+if not input_dir.exists():
+    print(f"Error: La carpeta {input_dir} no existe.")
+    exit(1)
 
-        # Preparar el ligando
-        prep = MoleculePreparation()
-        prep.load(ligand_path)  # Cargar el ligando
-        pdbqt_content = prep.write_pdbqt_string()  # Generar el contenido PDBQT
+# Crea la carpeta de salida si no existe
+output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Guardar el archivo PDBQT
-        with open(pdbqt_path, "w") as pdbqt_file:
-            pdbqt_file.write(pdbqt_content)
+# Lista todos los archivos en la carpeta de entrada
+dir_list = os.listdir(input_dir)
 
-        print(f"Ligando procesado: {ligand_file} -> {pdbqt_path}")
+# Itera sobre los archivos para convertir de .mol2 a .pdbqt
+for molecule in dir_list:
+    if molecule.endswith(".mol2"):
+        # Rutas completas para el archivo de entrada y salida
+        full_element_path = input_dir / molecule
+        converted_name = molecule.replace(".mol2", ".pdbqt")
+        full_converted_name = output_dir / converted_name
 
-print("Todos los ligandos han sido convertidos a formato PDBQT.")
+        # Ejecuta el comando de conversión usando Open Babel
+        command = subprocess.run(
+            ["obabel", str(full_element_path), "-O", str(full_converted_name)],
+            text=True,
+        )
+
+        # Verifica si la conversión fue exitosa
+        if command.returncode == 0:
+            print(f"Convertido: {full_element_path} -> {full_converted_name}")
+        else:
+            print(f"Error al convertir {full_element_path}")
+    else:
+        print(f"Saltando archivo no compatible: {molecule}")
+
