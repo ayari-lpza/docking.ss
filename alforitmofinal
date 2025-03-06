@@ -86,6 +86,12 @@ csv_dir.mkdir(parents=True, exist_ok=True)
 grid_center = "10.0 15.0 20.0"  # Modificar según análisis
 box_size = "20 20 20"  # Modificar según análisis
 
+# Crear archivo CSV
+csv_file = csv_dir / "docking_results.csv"
+with open(csv_file, mode="w", newline="") as file:
+    writer = csv.writer(file)
+    writer.writerow(["Ligand", "Binding Energy (kcal/mol)", "Log File"])
+
 # Iterar sobre ligandos
 def run_vina():
     for ligand_file in ligands_dir.glob("*.pdbqt"):
@@ -112,6 +118,20 @@ def run_vina():
         try:
             subprocess.run(command, check=True)
             print(f"Docking exitoso para {ligand_name}, resultados guardados en {output_pose_file}")
+            
+            # Extraer los resultados del archivo de log y escribir en CSV
+            with open(output_log_file, "r") as log_file:
+                log_content = log_file.read()
+                binding_energy = "Not found"
+                for line in log_content.splitlines():
+                    if "Affinity" in line:
+                        binding_energy = line.split()[1]
+                        break
+            
+            with open(csv_file, mode="a", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow([ligand_name, binding_energy, output_log_file])
+        
         except subprocess.CalledProcessError as e:
             print(f"Error en docking de {ligand_name}: {e}")
 
