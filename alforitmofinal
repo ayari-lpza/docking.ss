@@ -1,0 +1,120 @@
+import os
+import subprocess
+import requests
+from pathlib import Path
+import MDAnalysis as mda
+import csv
+
+# --- OBTENCIÓN DE PROTEÍNAS A PARTIR DE PDB ---
+gene_name = "SLC6A4"  # Nombre del gen a buscar
+organism_name = "Homo sapiens"  # Nombre del organismo
+pdb_id = "5I6X"  # Modificable
+print("Estructura seleccionada:", pdb_id)
+
+# --- DESCARGA DE LA ESTRUCTURA PDB ---
+protein_directory = "protein_structures"
+os.makedirs(protein_directory, exist_ok=True)
+
+pdb_request = requests.get(f"https://files.rcsb.org/download/{pdb_id}.pdb")
+if pdb_request.status_code == 200:
+    pdb_path = f"{protein_directory}/{pdb_id}.pdb"
+    with open(pdb_path, "w+") as f:
+        f.write(pdb_request.text)
+    print(f"Estructura {pdb_id} descargada y guardada en {protein_directory}/")
+else:
+    print(f"Error al descargar la estructura {pdb_id}. Código: {pdb_request.status_code}")
+
+# --- VISUALIZACIÓN DE LA ESTRUCTURA ---
+u = mda.Universe(pdb_path)
+print(u)
+
+# --- PREPARACIÓN DEL BLANCO ---
+protein = u.select_atoms("protein")
+protein_pdb_path = f"{protein_directory}/protein_{pdb_id}.pdb"
+protein.write(protein_pdb_path)
+protein_pqr_path = f"{protein_directory}/protein_{pdb_id}.pqr"
+
+# Ejecutar PDB2PQR
+pdb2pqr_command = ["pdb2pqr", "--ff=AMBER", "--with-ph=7.0", protein_pdb_path, protein_pqr_path]
+try:
+    subprocess.run(pdb2pqr_command, check=True)
+    print(f"Archivo PQR generado en: {protein_pqr_path}")
+except subprocess.CalledProcessError as e:
+    print(f"Error al ejecutar PDB2PQR: {e}")
+
+# --- CONVERSIÓN A PDBQT ---
+pdbqt_directory = "pdbqt_structures"
+os.makedirs(pdbqt_directory, exist_ok=True)
+u = mda.Universe(protein_pqr_path)
+pdbqt_path = f"{pdbqt_directory}/{pdb_id}.pdbqt"
+u.atoms.write(pdbqt_path)
+
+# Corregir formato para AutoDock Vina
+with open(pdbqt_path, 'r') as file:
+    file_content = file.read().replace('TITLE', 'REMARK').replace('CRYST1', 'REMARK')
+with open(pdbqt_path, 'w') as file:
+    file.write(file_content)
+
+# --- PREPARACIÓN DE LIGANDOS ---
+input_dir = Path("Ligands")
+output_dir = Path("C:/Users/User/Downloads/python/ligands_pdbqt")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+dir_list = os.listdir(input_dir)
+for molecule in dir_list:
+    if molecule.endswith(".mol2"):
+        full_element_path = input_dir / molecule
+        full_converted_name = output_dir / molecule.replace(".mol2", ".pdbqt")
+        command = subprocess.run(["obabel", str(full_element_path), "-O", str(full_converted_name)], text=True)
+        if command.returncode == 0:
+            print(f"Convertido: {full_element_path} -> {full_converted_name}")
+        else:
+            print(f"Error al convertir {full_element_path}")
+
+# --- DOCKING MOLECULAR ---
+# Definir la ruta a AutoDock Vina
+vina_path = r"C:\Users\User\Downloads\python\AutodockVina\vina.exe"
+
+# Definir rutas
+ligands_dir = Path("C:/Users/User/Downloads/python/ligands_pdbqt")
+results_dir = Path("C:/Users/User/Downloads/python/docking_results")
+csv_dir = Path("C:/Users/User/Downloads/python/docking_csv")
+results_dir.mkdir(parents=True, exist_ok=True)
+csv_dir.mkdir(parents=True, exist_ok=True)
+
+# Coordenadas de GridBox
+grid_center = "10.0 15.0 20.0"  # Modificar según análisis
+box_size = "20 20 20"  # Modificar según análisis
+
+# Iterar sobre ligandos
+def run_vina():
+    for ligand_file in ligands_dir.glob("*.pdbqt"):
+        ligand_name = ligand_file.stem
+        output_pose_file = results_dir / f"{ligand_name}_poses.pdbqt"
+        output_log_file = results_dir / f"{ligand_name}_log.txt"
+        
+        command = [
+            vina_path,
+            "--receptor", pdbqt_path,
+            "--ligand", str(ligand_file),
+            "--center_x", grid_center.split()[0],
+            "--center_y", grid_center.split()[1],
+            "--center_z", grid_center.split()[2],
+            "--size_x", box_size.split()[0],
+            "--size_y", box_size.split()[1],
+            "--size_z", box_size.split()[2],
+            "--exhaustiveness", "8",
+            "--num_modes", "10",
+            "--out", str(output_pose_file),
+            "--log", str(output_log_file)
+        ]
+        
+        try:
+            subprocess.run(command, check=True)
+            print(f"Docking exitoso para {ligand_name}, resultados guardados en {output_pose_file}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error en docking de {ligand_name}: {e}")
+
+run_vina()
+
+print("Proceso de docking completado.")
