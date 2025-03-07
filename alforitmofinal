@@ -74,25 +74,41 @@ for molecule in dir_list:
 # --- DOCKING MOLECULAR ---
 # Definir la ruta a AutoDock Vina
 vina_path = r"C:\Users\User\Downloads\python\AutodockVina\vina.exe"
-
+subprocess.run([vina_path, "--help"], check=True)
+vina = vina_path
+#encontrando coordenadas para la gridbox
+import MDAnalysis as mda
+#centro de gridbox
+original_structure = mda.Universe("protein_structures/5I6X.pdb")
+ligand_mda = original_structure.select_atoms("resname 8PR")
+pocket_center =ligand_mda.center_of_geometry()
+print(pocket_center)
+#tamaño de gridbox
+ligand_box = ligand_mda.positions.max(axis=0) -ligand_mda.positions.max(axis=0) +5  
+ligand_box
+#convirtiendo de Numpy arrays a listas
+pocket_center = pocket_center.tolist()
+ligand_box = ligand_box.tolist()
+#docking con AutodockVina
+pdb_id = "5I6X"
+ligand = "8PR"
 # Definir rutas
+vina_path = r"C:\Users\User\Downloads\python\AutodockVina\vina.exe"
 ligands_dir = Path("C:/Users/User/Downloads/python/ligands_pdbqt")
 results_dir = Path("C:/Users/User/Downloads/python/docking_results")
 csv_dir = Path("C:/Users/User/Downloads/python/docking_csv")
+receptor_file = pdbqt_path
+# Crear directorios si no existen
 results_dir.mkdir(parents=True, exist_ok=True)
 csv_dir.mkdir(parents=True, exist_ok=True)
 
-# Coordenadas de GridBox
-grid_center = "10.0 15.0 20.0"  # Modificar según análisis
-box_size = "20 20 20"  # Modificar según análisis
-
-# Crear archivo CSV
+# Crear archivo CSV para almacenar resultados
 csv_file = csv_dir / "docking_results.csv"
 with open(csv_file, mode="w", newline="") as file:
     writer = csv.writer(file)
-    writer.writerow(["Ligand", "Binding Energy (kcal/mol)", "Log File"])
+    writer.writerow(["Receptor", "Ligand", "Pose", "Affinity (kcal/mol)"])
 
-# Iterar sobre ligandos
+# Función para ejecutar docking con AutoDock Vina
 def run_vina():
     for ligand_file in ligands_dir.glob("*.pdbqt"):
         ligand_name = ligand_file.stem
@@ -101,14 +117,14 @@ def run_vina():
         
         command = [
             vina_path,
-            "--receptor", pdbqt_path,
+            "--receptor", str(receptor_file),
             "--ligand", str(ligand_file),
-            "--center_x", grid_center.split()[0],
-            "--center_y", grid_center.split()[1],
-            "--center_z", grid_center.split()[2],
-            "--size_x", box_size.split()[0],
-            "--size_y", box_size.split()[1],
-            "--size_z", box_size.split()[2],
+            "--center_x", str(pocket_center[0]),
+            "--center_y", str(pocket_center[1]),
+            "--center_z", str(pocket_center[2]),
+            "--size_x", str(ligand_box[0]),
+            "--size_y", str(ligand_box[1]),
+            "--size_z", str(ligand_box[2]),
             "--exhaustiveness", "8",
             "--num_modes", "10",
             "--out", str(output_pose_file),
@@ -120,17 +136,30 @@ def run_vina():
             print(f"Docking exitoso para {ligand_name}, resultados guardados en {output_pose_file}")
             
             # Extraer los resultados del archivo de log y escribir en CSV
+            results = []
             with open(output_log_file, "r") as log_file:
                 log_content = log_file.read()
-                binding_energy = "Not found"
                 for line in log_content.splitlines():
                     if "Affinity" in line:
-                        binding_energy = line.split()[1]
-                        break
+                        score = line.split()[1]
+                        results.append(score)
             
-            with open(csv_file, mode="a", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow([ligand_name, binding_energy, output_log_file])
+            docking_results = [
+                {"Receptor": receptor_file.stem, "Ligand": ligand_name, "Pose": i + 1, "Affinity (kcal/mol)": score}
+                for i, score in enumerate(results)
+            ]
+            
+            with open(csv_file, mode="w", newline="") as csvfile:
+                csv_writer = csv.DictWriter(csvfile, fieldnames=["receptor", "ligand", "pose", "affinity"])
+                csv_writer.writeheader()
+                csv_writer.writerows(docking_results)
+            print(f"Resultados guardados: {csv_file}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"Error en docking de {ligand_name}: {e}")
+
+run_vina()
+
         
         except subprocess.CalledProcessError as e:
             print(f"Error en docking de {ligand_name}: {e}")
